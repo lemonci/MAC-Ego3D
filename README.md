@@ -5,4 +5,4 @@
 
 > Our paper is under review. **The full code will be released in 2025 Feb.** Please stay tuned!
 
-[Video Demo](https://youtu.be/JOLQI_MNGAQ) [ArXiv (Coming soon)]()
+[Video Demo](https://youtu.be/JOLQI_MNGAQ) [ArXiv (Coming soon: 12/16)]()
