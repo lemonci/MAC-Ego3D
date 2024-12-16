@@ -3,6 +3,6 @@
 
 > University of Michigan, Ann Arbor & Carnegie Mellon University
 
-> Our paper is under review. **The full code will be released in 2025 Feb.** Please stay tuned!
+> Our paper is under review. **The full code will be released in 2025 Feb.** Please stay tuned! \star
 
-[Video Demo](https://youtu.be/JOLQI_MNGAQ) [ArXiv (Coming soon: 12/16)]()
+[Video Demo](https://youtu.be/JOLQI_MNGAQ) [ArXiv-Version Paper](https://arxiv.org/abs/2412.09723)
