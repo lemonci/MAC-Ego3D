@@ -22,6 +22,11 @@ Gaussian Consensus** to enable **real-time** pose tracking and **photorealistic*
 
 To set up the required environment, follow these steps:
 
+0. **Git clone the repo with submodules:**
+   ```bash
+   git clone --recursive https://github.com/Xiaohao-Xu/MAC-Ego3D.git
+   ```   
+
 1. **Create and activate a new Conda environment:**
 
    ```bash
@@ -32,8 +37,8 @@ To set up the required environment, follow these steps:
 2. **Install necessary dependencies:**
 
    ```bash
+   conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit
    conda install pytorch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 pytorch-cuda=11.8 -c pytorch -c nvidia
-   conda install nvidia/label/cuda-11.8.0::cuda-toolkit
    pip install -r requirements.txt
    ```
 
@@ -41,6 +46,8 @@ To set up the required environment, follow these steps:
 
    ```bash
    pip install pcl
+   sudo apt install libpcl-dev
+   sudo apt install libusb-1.0-0-dev
    ```
 
 4. **Install additional submodules:**
@@ -74,13 +81,11 @@ To set up the required environment, follow these steps:
 
 ## Datasets
 
-### Replica (Multi-Agent Version from [this repo](https://huggingface.co/datasets/wssy37/CP-SLAM_dataset))
+### Multi-Agent Replica
 
-1. **Download the Replica dataset:**
+1. **Download the Multi-Agent Replica dataset:**
 
-   ```bash
-   bash download_replica.sh
-   ```
+   Please download the dataset from the [HuggingFace Repo](https://huggingface.co/datasets/wssy37/CP-SLAM_dataset) and unzip them.
 
 2. **Adjust directory structure:**
 
@@ -121,7 +126,7 @@ To set up the required environment, follow these steps:
    Some sequences in certain scenes may have missing frames. Make sure to remove any empty folders after processing.
 
    ```bash
-   python 7Scene2ICP.py  # Modify the script to reflect the correct dataset and output paths
+   python ./utils/7Scene2ICP.py  # Modify the script to reflect the correct dataset and output paths
    ```
 
 ---
@@ -134,7 +139,7 @@ To set up the required environment, follow these steps:
 To run all the experiments on the Multi-Agent Replica dataset:
 
 ```bash
-bash multitest.sh
+bash multitest_multi_agent_replica.sh
 ```
 
 ### 7Scenes Dataset
