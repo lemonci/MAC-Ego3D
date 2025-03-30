@@ -3,7 +3,7 @@
 
 > University of Michigan, Ann Arbor & Carnegie Mellon University
 
-> **The full code will be released in 2025 Feb.** Please stay tuned! :smiley:
+> **The full code are released!** :smiley:
 
 [**:heart: Video Demo**](https://youtu.be/JOLQI_MNGAQ) [**:star: ArXiv Paper**](https://arxiv.org/abs/2412.09723)
 
@@ -20,8 +20,9 @@ Gaussian Consensus** to enable **real-time** pose tracking and **photorealistic*
 
 ## Environment Setup
 
-To set up the required environment, follow these steps:
-
+To set up the required environment, follow the following steps.
+Alternatively, you can set up the environment using the [**Dockerfile**](https://github.com/Xiaohao-Xu/MAC-Ego3D/blob/main/Dockerfile).
+   
 0. **Git clone the repo with submodules:**
    ```bash
    git clone --recursive https://github.com/Xiaohao-Xu/MAC-Ego3D.git
