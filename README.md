@@ -3,7 +3,7 @@
 
 > University of Michigan, Ann Arbor & Carnegie Mellon University
 
-> **The full code are released!** :smiley:
+> **The full code is available!** :smiley:
 
 [**:heart: Video Demo**](https://youtu.be/JOLQI_MNGAQ) [**:star: ArXiv Paper**](https://arxiv.org/abs/2412.09723)
 
