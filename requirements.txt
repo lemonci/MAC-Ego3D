@@ -10,3 +10,4 @@ pytorch-metric-learning==2.3.0
 faiss-gpu==1.7.2
 prettytable==3.9.0
 gtsam
+numpy==1.26.0
