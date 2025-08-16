@@ -476,8 +476,7 @@ class Tracker(SLAMParameters):
                                     transformation_prop = np.dot(refined_transform, current_pose)
 
                                 else:
-                                    print("Coarse alignment failed, skipping loop closure.")
-                                    continue
+                                    raise RuntimeError("Coarse alignment failed, skipping loop closure.")
                                 
                             else:
                                 rel_FGICP = pygicp.FastGICP()
