@@ -293,8 +293,8 @@ class Tracker(SLAMParameters):
                     #Add first graph
                     if self.ifma == 1:
                         self.initial_estimates.insert(agentIndex * self.max_frame_number, self.rawPose2GTSAMPose(current_pose))
-                        if agentIndex == 0:  # Only add prior constraint for the first agent
-                            self.graph.add(gtsam.PriorFactorPose3(agentIndex * self.max_frame_number , self.rawPose2GTSAMPose(current_pose), self.prior_noise))
+                        #if agentIndex == 0:  # Only add prior constraint for the first agent
+                        #    self.graph.add(gtsam.PriorFactorPose3(agentIndex * self.max_frame_number , self.rawPose2GTSAMPose(current_pose), self.prior_noise))
                     
                     if self.rerun_viewer:
                         # rr.set_time_sequence("step", self.iteration_images)
