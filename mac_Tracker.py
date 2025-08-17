@@ -188,6 +188,107 @@ class Tracker(SLAMParameters):
         print("salad time:", ed_salad - st_salad)
         return descriptor
     """
+    def fpfh_ransac_alignment(self, source_points, target_points, voxel_size=0.05):
+        """
+        Perform FPFH+RANSAC coarse alignment between source and target point clouds.
+        
+        Args:
+            source_points: Current frame point cloud (Nx3)
+            target_points: Target keyframe point cloud (Nx3) 
+            voxel_size: Voxel size for downsampling and normal estimation
+            
+        Returns:
+            transformation: 4x4 transformation matrix
+            success: Boolean indicating if alignment was successful
+        """
+        try:
+            # Convert numpy arrays to Open3D point clouds
+            source_pcd = o3d.geometry.PointCloud()
+            source_pcd.points = o3d.utility.Vector3dVector(source_points)
+            
+            target_pcd = o3d.geometry.PointCloud()
+            target_pcd.points = o3d.utility.Vector3dVector(target_points)
+            
+            # Downsample point clouds
+            source_down = source_pcd.voxel_down_sample(voxel_size)
+            target_down = target_pcd.voxel_down_sample(voxel_size)
+            
+            # Estimate normals
+            radius_normal = voxel_size * 2
+            source_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+            target_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+            
+            # Compute FPFH features
+            radius_feature = voxel_size * 5
+            source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+                source_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+            target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+                target_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+            
+            # RANSAC-based registration
+            distance_threshold = voxel_size * 1.5
+            result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
+                source_down, target_down, source_fpfh, target_fpfh, 
+                mutual_filter=True,
+                max_correspondence_distance=distance_threshold,
+                estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
+                ransac_n=3,
+                checkers=[
+                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold)
+                ],
+                criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999)
+            )
+            
+            # Check if registration was successful
+            if result.fitness > 0.1:  # At least 10% of points should be aligned
+                return result.transformation, True
+            else:
+                return np.eye(4), False
+                
+        except Exception as e:
+            print(f"FPFH+RANSAC alignment failed: {e}")
+            return np.eye(4), False
+
+    def refined_icp_alignment(self, source_points, target_points, initial_transform, max_correspondence_distance=0.02):
+        """
+        Refine alignment using ICP after coarse FPFH+RANSAC alignment.
+        
+        Args:
+            source_points: Current frame point cloud (Nx3)
+            target_points: Target keyframe point cloud (Nx3)
+            initial_transform: Initial transformation from FPFH+RANSAC
+            max_correspondence_distance: Maximum distance for ICP correspondences
+            
+        Returns:
+            refined_transformation: 4x4 refined transformation matrix
+        """
+        try:
+            # Convert to Open3D point clouds
+            source_pcd = o3d.geometry.PointCloud()
+            source_pcd.points = o3d.utility.Vector3dVector(source_points)
+            
+            target_pcd = o3d.geometry.PointCloud()
+            target_pcd.points = o3d.utility.Vector3dVector(target_points)
+            
+            # Apply initial transformation
+            source_pcd.transform(initial_transform)
+            
+            # ICP refinement
+            result = o3d.pipelines.registration.registration_icp(
+                source_pcd, target_pcd, max_correspondence_distance, np.eye(4),
+                o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=100)
+            )
+            
+            # Combine transformations
+            final_transform = np.dot(result.transformation, initial_transform)
+            return final_transform
+            
+        except Exception as e:
+            print(f"ICP refinement failed: {e}")
+            return initial_transform
+
     def input_transform(self, img_tensor, image_size=None):
         """Apply transformation directly on PyTorch tensors."""
         MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1).to('cuda')
@@ -451,32 +552,40 @@ class Tracker(SLAMParameters):
                         if bestIndex != -1:
                             print(f'Loop Closure Detected, Agent{agentIndex}_Frame{ii} and Agent{self.keyframe_info[bestIndex][3]}_Frame{self.keyframe_info[bestIndex][4]} with Score: {highestScore}')
                             self.loop_detected += 1
-                            if agentIndex != self.keyframe_info[bestIndex][3]:
+                            # Check if this is inter-agent loop closure
+                            is_inter_agent = (agentIndex != self.keyframe_info[bestIndex][3])
+
+                            # Get point clouds
+                            source_raw = points_raw  # Current frame points
+                            target_raw = self.keyframe_info[bestIndex][0]  # Historical keyframe points
+                            target_pose = self.poses[self.keyframe_info[bestIndex][3]][self.keyframe_info[bestIndex][4]]
+                            
+                            # Transform target points to world frame
+                            inv_target = np.linalg.inv(target_pose)
+                            T_tmp = inv_target[:3,3]
+                            R_tmp = inv_target[:3,:3].transpose()
+                            target_world = np.matmul(R_tmp, target_raw.transpose()).transpose() - np.matmul(R_tmp, T_tmp)
+                                
+                            # Variable to track if we should proceed with GTSAM optimization
+                            should_optimize = True
+                            transformation_prop = None
+
+                            if is_inter_agent:
                                 print(f'Inter-Agent Loop Closure Detected, Agent{agentIndex}_Frame{ii} and Agent{self.keyframe_info[bestIndex][3]}_Frame{self.keyframe_info[bestIndex][4]} with Score: {highestScore}')
                                 
-                                # Get point clouds
-                                source_raw = points_raw  # Current frame points
-                                target_raw = self.keyframe_info[bestIndex][0]  # Historical keyframe points
-                                target_pose = self.poses[self.keyframe_info[bestIndex][3]][self.keyframe_info[bestIndex][4]]
-                                
-                                # Transform target points to world frame
-                                inv_target = np.linalg.inv(target_pose)
-                                T_tmp = inv_target[:3,3]
-                                R_tmp = inv_target[:3,:3].transpose()
-                                target_world = np.matmul(R_tmp, target_raw.transpose()).transpose() - np.matmul(R_tmp, T_tmp)
-                                
                                 # FPFH+RANSAC coarse alignment
-                                coarse_transform, alignment_success = self.fpfh_ransac_alignment(source_raw, target_world, voxel_size=0.05)
+                                coarse_transform, alignment_success = self.fpfh_ransac_alignment(points_raw, target_world, voxel_size=0.05)
                                 
                                 if alignment_success:
                                     # Refine with ICP
-                                    refined_transform = self.refined_icp_alignment(source_raw, target_world, coarse_transform, self.max_correspondence_distance / 2)
-                                    
+                                    refined_transform = self.refined_icp_alignment(points_raw, target_world, coarse_transform, self.max_correspondence_distance / 2)
                                     # Convert refined transformation to pose
                                     transformation_prop = np.dot(refined_transform, current_pose)
-
                                 else:
-                                    raise RuntimeError("Coarse alignment failed, skipping loop closure.")
+                                    print(f"FPFH+RANSAC failed for inter-agent loop closure between Agent{agentIndex}_Frame{ii} and Agent{self.keyframe_info[bestIndex][3]}_Frame{self.keyframe_info[bestIndex][4]}")
+                                    print("Skipping this inter-agent loop closure to avoid incorrect constraints")
+                                    # Skip this loop closure entirely - don't add any constraint to GTSAM
+                                    should_optimize = False
                                 
                             else:
                                 rel_FGICP = pygicp.FastGICP()
@@ -486,12 +595,12 @@ class Tracker(SLAMParameters):
                                 rel_FGICP.set_source_filter(num_trackable_points, input_filter)
 
                                 # Set target (points1) and filter the history keyframe point cloud
-                                target_raw = self.keyframe_info[bestIndex][0]
-                                target_pose = self.poses[self.keyframe_info[bestIndex][3]][self.keyframe_info[bestIndex][4]]
-                                inv_target = np.linalg.inv(target_pose) #current_pose is inversed for convenient pointcloud transform
-                                T_tmp = inv_target[:3,3]
-                                R_tmp = inv_target[:3,:3].transpose()
-                                target_world = np.matmul(R_tmp, target_raw.transpose()).transpose() - np.matmul(R_tmp, T_tmp)
+                                # target_raw = self.keyframe_info[bestIndex][0]
+                                # target_pose = self.poses[self.keyframe_info[bestIndex][3]][self.keyframe_info[bestIndex][4]]
+                                # inv_target = np.linalg.inv(target_pose) #current_pose is inversed for convenient pointcloud transform
+                                # T_tmp = inv_target[:3,3]
+                                # R_tmp = inv_target[:3,:3].transpose()
+                                # target_world = np.matmul(R_tmp, target_raw.transpose()).transpose() - np.matmul(R_tmp, T_tmp)
                                 rel_FGICP.set_input_target(target_world)
                                 rel_FGICP.set_target_filter(self.keyframe_info[bestIndex][1], self.keyframe_info[bestIndex][2])
                                 
@@ -499,30 +608,32 @@ class Tracker(SLAMParameters):
                                 rel_FGICP.set_max_correspondence_distance(self.max_correspondence_distance / 2)
 
                             transformation_prop = rel_FGICP.align(current_pose) #The proposed world pose of current frame by loop closure
-                            rel_mat = self.rawPose2GTSAMPose(target_pose).between(self.rawPose2GTSAMPose(transformation_prop))
-                            
-                            # #Use GT relative pose in loop closure to prove that the accuracy limitation comes from relative pose estimation                       
-                            self.graph.add(gtsam.BetweenFactorPose3(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4], agentIndex * self.max_frame_number + ii, rel_mat,self.closure_noise))
-                            if self.initial_estimates.exists(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4]):
-                                pass
-                            else:
-                                self.initial_estimates.insert(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4], self.rawPose2GTSAMPose(target_pose))
-                            parameters = gtsam.LevenbergMarquardtParams()
-                            optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, self.initial_estimates, parameters)
-                            # optimizer = gtsam.GaussNewtonOptimizer(self.graph, self.initial_estimates)
-                            self.finalOptResult = optimizer.optimize()
+                            # Only proceed with GTSAM optimization if we have a valid transformation
+                            if should_optimize and transformation_prop is not None:
+                                rel_mat = self.rawPose2GTSAMPose(target_pose).between(self.rawPose2GTSAMPose(transformation_prop))
+                                
+                                # #Use GT relative pose in loop closure to prove that the accuracy limitation comes from relative pose estimation                       
+                                self.graph.add(gtsam.BetweenFactorPose3(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4], agentIndex * self.max_frame_number + ii, rel_mat,self.closure_noise))
+                                if self.initial_estimates.exists(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4]):
+                                    pass
+                                else:
+                                    self.initial_estimates.insert(self.keyframe_info[bestIndex][3] * self.max_frame_number + self.keyframe_info[bestIndex][4], self.rawPose2GTSAMPose(target_pose))
+                                parameters = gtsam.LevenbergMarquardtParams()
+                                optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, self.initial_estimates, parameters)
+                                # optimizer = gtsam.GaussNewtonOptimizer(self.graph, self.initial_estimates)
+                                self.finalOptResult = optimizer.optimize()
         
                             
-                            self.initial_estimates = self.finalOptResult
-                            current_pose = self.GTSAMPose2RawPose(self.finalOptResult.atPose3(agentIndex * self.max_frame_number + ii)) #T_avg is optimized world pose of current frame
+                                self.initial_estimates = self.finalOptResult
+                                current_pose = self.GTSAMPose2RawPose(self.finalOptResult.atPose3(agentIndex * self.max_frame_number + ii)) #T_avg is optimized world pose of current frame
 
-                            for ai in range(agentIndex + 1):
-                                if ai == agentIndex:
-                                    iter_num = ii
-                                else:
-                                    iter_num = self.trajmanager[ai].gt_poses.shape[0]
-                                for key in range(iter_num):
-                                    self.poses[ai][key] = self.GTSAMPose2RawPose(self.finalOptResult.atPose3(ai * self.max_frame_number + key))
+                                for ai in range(agentIndex + 1):
+                                    if ai == agentIndex:
+                                        iter_num = ii
+                                    else:
+                                        iter_num = self.trajmanager[ai].gt_poses.shape[0]
+                                    for key in range(iter_num):
+                                        self.poses[ai][key] = self.GTSAMPose2RawPose(self.finalOptResult.atPose3(ai * self.max_frame_number + key))
                                     
                         
                         #Remapping the mapping keyframe based on optmized traj
@@ -846,104 +957,3 @@ class Tracker(SLAMParameters):
         avg_trans_error = trans_error.mean()
 
         return avg_trans_error, est_aligned
-
-    def fpfh_ransac_alignment(self, source_points, target_points, voxel_size=0.05):
-        """
-        Perform FPFH+RANSAC coarse alignment between source and target point clouds.
-        
-        Args:
-            source_points: Current frame point cloud (Nx3)
-            target_points: Target keyframe point cloud (Nx3) 
-            voxel_size: Voxel size for downsampling and normal estimation
-            
-        Returns:
-            transformation: 4x4 transformation matrix
-            success: Boolean indicating if alignment was successful
-        """
-        try:
-            # Convert numpy arrays to Open3D point clouds
-            source_pcd = o3d.geometry.PointCloud()
-            source_pcd.points = o3d.utility.Vector3dVector(source_points)
-            
-            target_pcd = o3d.geometry.PointCloud()
-            target_pcd.points = o3d.utility.Vector3dVector(target_points)
-            
-            # Downsample point clouds
-            source_down = source_pcd.voxel_down_sample(voxel_size)
-            target_down = target_pcd.voxel_down_sample(voxel_size)
-            
-            # Estimate normals
-            radius_normal = voxel_size * 2
-            source_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
-            target_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
-            
-            # Compute FPFH features
-            radius_feature = voxel_size * 5
-            source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
-                source_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
-            target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
-                target_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
-            
-            # RANSAC-based registration
-            distance_threshold = voxel_size * 1.5
-            result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
-                source_down, target_down, source_fpfh, target_fpfh, 
-                mutual_filter=True,
-                max_correspondence_distance=distance_threshold,
-                estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
-                ransac_n=3,
-                checkers=[
-                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
-                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold)
-                ],
-                criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999)
-            )
-            
-            # Check if registration was successful
-            if result.fitness > 0.1:  # At least 10% of points should be aligned
-                return result.transformation, True
-            else:
-                return np.eye(4), False
-                
-        except Exception as e:
-            print(f"FPFH+RANSAC alignment failed: {e}")
-            return np.eye(4), False
-
-    def refined_icp_alignment(self, source_points, target_points, initial_transform, max_correspondence_distance=0.02):
-        """
-        Refine alignment using ICP after coarse FPFH+RANSAC alignment.
-        
-        Args:
-            source_points: Current frame point cloud (Nx3)
-            target_points: Target keyframe point cloud (Nx3)
-            initial_transform: Initial transformation from FPFH+RANSAC
-            max_correspondence_distance: Maximum distance for ICP correspondences
-            
-        Returns:
-            refined_transformation: 4x4 refined transformation matrix
-        """
-        try:
-            # Convert to Open3D point clouds
-            source_pcd = o3d.geometry.PointCloud()
-            source_pcd.points = o3d.utility.Vector3dVector(source_points)
-            
-            target_pcd = o3d.geometry.PointCloud()
-            target_pcd.points = o3d.utility.Vector3dVector(target_points)
-            
-            # Apply initial transformation
-            source_pcd.transform(initial_transform)
-            
-            # ICP refinement
-            result = o3d.pipelines.registration.registration_icp(
-                source_pcd, target_pcd, max_correspondence_distance, np.eye(4),
-                o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-                o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=100)
-            )
-            
-            # Combine transformations
-            final_transform = np.dot(result.transformation, initial_transform)
-            return final_transform
-            
-        except Exception as e:
-            print(f"ICP refinement failed: {e}")
-            return initial_transform
