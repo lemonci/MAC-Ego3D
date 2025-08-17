@@ -354,7 +354,6 @@ class Mapper(SLAMParameters):
         if self.save_results and not self.rerun_viewer:
             self.gaussians.save_ply(os.path.join(self.output_path, "scene.ply"))
         self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
-        self.gaussians.save_ply(os.path.join(self.output_path, "scene_pruned.ply"))
         print(self.train_iter)
         print(len(self.gaussians.get_xyz))
         for index in range(len(self.dataset_path)):
