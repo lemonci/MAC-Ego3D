@@ -37,6 +37,9 @@ fast_gicp::NeighborSearchMethod search_method(const std::string& neighbor_search
 pcl::PointCloud<pcl::PointXYZ>::Ptr eigen2pcl(const Eigen::Matrix<double, -1, 3>& points) {
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   cloud->resize(points.rows());
+  cloud->width = points.rows();
+  cloud->height = 1;
+  cloud->is_dense = true;
 
   for(int i=0; i<points.rows(); i++) {
     cloud->at(i).getVector3fMap() = points.row(i).cast<float>();

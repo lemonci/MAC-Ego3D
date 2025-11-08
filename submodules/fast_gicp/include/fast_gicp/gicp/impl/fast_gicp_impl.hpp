@@ -600,6 +600,9 @@ bool FastGICP<PointSource, PointTarget, SearchMethodSource, SearchMethodTarget>:
 
   typename pcl::PointCloud<PointT>::Ptr newCloud(new pcl::PointCloud<PointT>);
   newCloud->points.resize(source_num_trackable_points_);
+  newCloud->width = source_num_trackable_points_;
+  newCloud->height = 1;
+  newCloud->is_dense = true;
   // pcl::copyPointCloud(*cloud, filter, *newCloud);
 
   // save covariances of trackable points
@@ -721,6 +724,9 @@ bool FastGICP<PointSource, PointTarget, SearchMethodSource, SearchMethodTarget>:
 
   typename pcl::PointCloud<PointT>::Ptr newCloud(new pcl::PointCloud<PointT>);
   newCloud->points.resize(target_num_trackable_points_);
+  newCloud->width = target_num_trackable_points_;
+  newCloud->height = 1;
+  newCloud->is_dense = true;
   // pcl::copyPointCloud(*cloud, filter, *newCloud);
 
   // save covariances of trackable points
