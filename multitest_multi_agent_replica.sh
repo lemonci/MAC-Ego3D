@@ -1,8 +1,8 @@
 #OUTPUT_PATH="experiments/results"
-OUTPUT_PATH="/media/hdd/xiaohao/experiments_ma_ulim/test"
+OUTPUT_PATH="/media/mistlab/Elements/MAC-Ego3D/Replica"
 
 #DATASET_PATH="dataset/Replica"
-DATASET_PATH="/media/hdd/xiaohao/data/cpslam_data_icp/cp-slam"
+DATASET_PATH="/media/mistlab/Elements/ReplicaMultiagent"
 # DATASET_PATH="/media/hdd/xiaohao/data/cpslam_14_1_0"
 
 
@@ -56,7 +56,7 @@ run_()
     local trackable_opacity_th=$8
     local overlapped_th2=$9
     local downsample_rate=${10}
-    local cuda_device=${11}  # Added parameter for CUDA device
+    local cuda_device=0  # Added parameter for CUDA device
     local group=${12}
     echo "run datasets: $datasets on CUDA device $cuda_device"
      python -W ignore mac_ego.py --dataset_path $datasets\
@@ -74,6 +74,7 @@ run_()
                                     --noise 0\
                                     --lc_freq 150\
                                     --post_opt 1\
+                                    --seed 1\
 				    --save_results #&
     # Use & to run the process in the background
 }
@@ -91,14 +92,14 @@ run_cpslam()
     local downsample_rate=$8
     local device=2
     # Pass datasets without extra single quotes to prevent path errors
-    datasets="$DATASET_PATH/Apart-0/apart_0_part1;$DATASET_PATH/Apart-0/apart_0_part2"
-    run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-0"
+    #datasets="$DATASET_PATH/Apart-0/apart_0_part1;$DATASET_PATH/Apart-0/apart_0_part2"
+    #run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-0"
 
-    datasets="$DATASET_PATH/Apart-1/apart_1_part1;$DATASET_PATH/Apart-1/apart_1_part2"
-    run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-1"
+    #datasets="$DATASET_PATH/Apart-1/apart_1_part1;$DATASET_PATH/Apart-1/apart_1_part2"
+    #run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-1"
 
-    datasets="$DATASET_PATH/Apart-2/apart_2_part2;$DATASET_PATH/Apart-2/apart_2_part1"
-    run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-2"
+    #datasets="$DATASET_PATH/Apart-2/apart_2_part2;$DATASET_PATH/Apart-2/apart_2_part1"
+    #run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Apart-2"
 
     datasets="$DATASET_PATH/Office-0/office_0_part1;$DATASET_PATH/Office-0/office_0_part2"
     run_ "$datasets" "configs/Replica/caminfo.txt" $result_txt $keyframe_th $knn_maxd $overlapped_th $max_correspondence_distance $trackable_opacity_th $overlapped_th2 $downsample_rate $device "/Office-0"
