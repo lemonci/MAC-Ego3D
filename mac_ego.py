@@ -1,4 +1,6 @@
 import os
+# Set before importing torch
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64'
 import torch
 import torch.multiprocessing as mp
 import torch.multiprocessing
@@ -17,7 +19,7 @@ from scene.shared_objs import SharedCam, SharedGaussians, SharedPoints, SharedTa
 from gaussian_renderer import render, network_gui
 from mac_Tracker import Tracker
 from mac_Mapper import Mapper
-
+import random
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -245,6 +247,15 @@ class MAC_EGO(SLAMParameters):
  
         return image_files, depth_files
     
+def setup_seed(seed: int) -> None:
+    """ Sets the seed for generating random numbers to ensure reproducibility across multiple runs. """
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="dataset_path / output_path / verbose")
@@ -268,8 +279,13 @@ if __name__ == "__main__":
     parser.add_argument('--noise', default=0, help="Whether use noised depth frame. 0 for not, 1 for yes")
     parser.add_argument('--lc_freq', default=150, help="Loop Closure every given frames")
     parser.add_argument('--post_opt', default=0, help="Whether train more times for mapping to get better reconstruction, 0 for not, 1 for yes")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility")
     args = parser.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
 
+    # Append seed to output path
+    args.output_path = f"{args.output_path}_seed{args.seed}"
+
+    setup_seed(args.seed)  # Set the seed before initializing MAC_EGO
     mac_ego = MAC_EGO(args)
     mac_ego.run()
