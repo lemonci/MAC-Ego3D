@@ -1,4 +1,6 @@
 import os
+# Set before importing torch
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64'
 import torch
 import torch.multiprocessing as mp
 import torch.multiprocessing
@@ -18,6 +20,8 @@ from gaussian_renderer import render, render_3, network_gui
 from tqdm import tqdm
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 import open3d as o3d
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 class Pipe():
@@ -264,7 +268,7 @@ class Mapper(SLAMParameters):
                         
                 self.training = False
                 self.train_iter += 1
-        torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
         if self.verbose:
             while True:
                 self.run_viewer(False)
@@ -347,7 +351,7 @@ class Mapper(SLAMParameters):
                         
                 self.training = False
                 self.train_iter += 1
-            torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
             
             endT = time.time()
             print(f"Post Mapping Optimize Time: {endT - st}, Average Time per Iter: {(endT - st) / addtionalT}s")
@@ -509,7 +513,7 @@ class Mapper(SLAMParameters):
                     axs[1,1].imshow(np.asarray(ours_depth.detach().cpu()).squeeze())
                     axs[1,1].axis("off")
                     plt.suptitle(f'{i+1} frame')
-                    plt.pause(1e-15)
+                    # plt.pause(1e-15)
                     plt.savefig(f"{self.output_path}/agent_{index}_result_{i}.png")
                     plt.cla()
                     ours_rgb = np.array(ours_rgb * 255, dtype=np.uint8)
@@ -539,6 +543,13 @@ class Mapper(SLAMParameters):
             print(f"Mean Render Time: {np.mean(np.array(render_time)):.4f}")
             print(f"Mean Metrics\nPSNR of Agent{index}: {psnrs.mean():.2f} SSIM of Agent{index}: {ssims.mean():.3f} LPIPS of Agent{index}: {lpips.mean():.3f} DepthL1 of Agent{index}: {ds.mean()*100:.3f}")
             print(f"Median Metrics\nPSNR of Agent{index}: {np.median(psnrs):.2f} SSIM of Agent{index}: {np.median(ssims):.3f} LPIPS of Agent{index}: {np.median(lpips):.3f} DepthL1 of Agent{index}: {np.median(ds)*100:.3f}")
+
+            # Save metrics to a text file
+            metrics_txt = os.path.join(self.output_path, f"metrics_agent{index}.txt")
+            with open(metrics_txt, "w") as f:
+                f.write(f"Mean Render Time: {np.mean(np.array(render_time)):.4f}\n")
+                f.write(f"Mean Metrics\nPSNR of Agent{index}: {psnrs.mean():.2f} SSIM of Agent{index}: {ssims.mean():.3f} LPIPS of Agent{index}: {lpips.mean():.3f} DepthL1 of Agent{index}: {ds.mean()*100:.3f}\n")
+                f.write(f"Median Metrics\nPSNR of Agent{index}: {np.median(psnrs):.2f} SSIM of Agent{index}: {np.median(ssims):.3f} LPIPS of Agent{index}: {np.median(lpips):.3f} DepthL1 of Agent{index}: {np.median(ds)*100:.3f}\n")
 
 def mse2psnr(x):
     return -10.*torch.log(x)/torch.log(torch.tensor(10.))
